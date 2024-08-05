@@ -17,33 +17,39 @@ def process_gabor_filter(pc, gabor_folder_path, img2, gray_image, image_info):
     theta = pc[1]  # Orientation of the normal to the parallel stripes of a Gabor function
     gamma = 0.5  # Spatial aspect ratio
     gabor_label = 'Gabor' + str(num).zfill(2)  # Label for the Gabor filter
-
+    
+    kernels = []
+    
     curr_gabor_path = os.path.join(gabor_folder_path, gabor_label + '.tif')
     sigma = 0.56 * lamda  # Standard deviation of the Gaussian function used in the Gabor filter
+    
+    # Create the Gabor kernel
+    ksize = int(8 * sigma + 1)  # Size of the filter
+    kernel = cv2.getGaborKernel((ksize, ksize), sigma, theta, lamda, gamma, 0, ktype=cv2.CV_32F)
 
     # Check if the Gabor filter image already exists
     if not os.path.exists(curr_gabor_path):
         print(gabor_label)
 
-        # Create the Gabor kernel
-        ksize = int(8 * sigma + 1)  # Size of the filter
-        kernel = cv2.getGaborKernel((ksize, ksize), sigma, theta, lamda, gamma, 0, ktype=cv2.CV_32F)
+        
 
         # Apply the Gabor filter to the image
-        fimg = cv2.filter2D(img2, cv2.CV_32F, kernel)
+        fimg = cv2.filter2D(gray_image, cv2.CV_32F, kernel)
         filtered_img = np.reshape(fimg, np.shape(gray_image))
 
         # Save the filtered image
         save_image(filtered_img, curr_gabor_path, 'GTiff', 6, image_info['geotransform'], image_info['projection'])
         print(gabor_label + ' SAVED')
+        
+    return (gabor_label, kernel);
 
 # Function to create a VRT (Virtual Dataset) from a list of files
-def create_vrt(file_list, band_name_list, resolution=0.25, overwrite=False):
+def create_vrt(file_list, band_name_list, resolution=None, overwrite=False):
     from osgeo import gdal
     import os
 
     vrtname = os.path.join(os.path.dirname(file_list[0]), '00_features.vrt')
-
+    
     # Check if the VRT already exists
     if os.path.exists(vrtname) and not overwrite:
         print(vrtname + ' has already been created')
@@ -62,8 +68,82 @@ def create_vrt(file_list, band_name_list, resolution=0.25, overwrite=False):
             VRT_dataset.GetRasterBand(idx).SetDescription(band_name)
         VRT_dataset = None
 
+# def save_subplot_png(out, output_file):
+    
+#     import matplotlib.pyplot as plt
+    
+#     num_plots = len(out)
+#     cols = 3
+#     rows = (num_plots // cols) + (num_plots % cols > 0)
+
+#     fig, axs = plt.subplots(rows, cols, figsize=(15, 5 * rows))
+
+#     for idx, (title, array) in enumerate(out):
+#         row = idx // cols
+#         col = idx % cols
+#         ax = axs[row, col] if rows > 1 else axs[col]
+#         im = ax.imshow(array, cmap='viridis')
+#         ax.set_title(title)
+#         ax.axis('off')  # Turn off axis
+#         fig.colorbar(im, ax=ax, orientation='vertical')
+
+#     # Hide any empty subplots
+#     for j in range(idx + 1, rows * cols):
+#         fig.delaxes(axs.flatten()[j])
+
+#     plt.tight_layout()
+#     plt.savefig(output_file, bbox_inches='tight')
+#     plt.close()
+    
+#     print('save image gabor')
+
+def save_subplot_png(data, output_file):
+    
+    import matplotlib.pyplot as plt
+    import os
+    print(f"Saving subplot PNG to {output_file}")
+    
+    # Check if the directory exists
+    output_dir = os.path.dirname(output_file)
+    if output_dir and not os.path.exists(output_dir):
+        print(f"Output directory {output_dir} does not exist. Creating it.")
+        os.makedirs(output_dir)
+
+    num_plots = len(data)
+    cols = 3
+    rows = (num_plots // cols) + (num_plots % cols > 0)
+
+    fig, axs = plt.subplots(rows, cols, figsize=(15, 5 * rows))
+    
+    for idx, (title, array) in enumerate(data):
+        row = idx // cols
+        col = idx % cols
+        ax = axs[row, col] if rows > 1 else axs[col]
+        im = ax.imshow(array, cmap='viridis')
+        ax.set_title(title)
+        ax.axis('off')  # Turn off axis
+        fig.colorbar(im, ax=ax, orientation='vertical')
+
+    # Hide any empty subplots
+    for j in range(idx + 1, rows * cols):
+        fig.delaxes(axs.flatten()[j])
+
+    plt.tight_layout()
+    
+    # Debugging: Print the figure's tight layout and bounds
+    print("Figure tight layout set.")
+    
+    # Save the figure
+    try:
+        plt.savefig(output_file, bbox_inches='tight')
+        print(f"File saved successfully: {output_file}")
+    except Exception as e:
+        print(f"Error saving file: {e}")
+
+    plt.close()
+    print("Figure closed.")
 # Function to generate Gabor features
-def gabor_features_generator(vhr_img_path, gabor_params, num_cores):
+def gabor_features_generator(vhr_img_path, gabor_params, num_cores, resolution=None):
     from utilities import open_image, save_image
     import os
     from osgeo import gdal
@@ -75,10 +155,24 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores):
 
     # Open the VHR (Very High Resolution) image
     image, image_info = open_image(vhr_img_path)
+    
+    if resolution == None:
+        
+        resolution = image_info['geotransform'][1]
+        
+        print('Resolution set to input image resolution' )
+        
+        
+    
 
-    # Convert the image to grayscale and remove the alpha band
-    image = np.delete(image, -1, axis=0)
-    gray_image = cv2.cvtColor(np.transpose(image, (1, 2, 0)), cv2.COLOR_BGR2GRAY)
+    # Convert the image to grayscale and remove the alpha band if present
+    if np.shape(image)[0] == 4:
+        image = np.delete(image, -1, axis=0)
+        
+    image[image<0] = 0
+    
+    
+    gray_image = cv2.cvtColor(np.transpose(image.astype('uint8'), (1, 2, 0)), cv2.COLOR_BGR2GRAY)
 
     # Reshape the image to 2D
     img2 = gray_image.reshape(-1)
@@ -108,9 +202,13 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores):
                                         for lamda in lambda_list], start=1)]
 
     # Parallel computation of Gabor features
-    Parallel(n_jobs=num_cores, verbose=1)(delayed(process_gabor_filter)(pc, gabor_folder_path, img2, gray_image, image_info)
+    out = Parallel(n_jobs=num_cores, verbose=1)(delayed(process_gabor_filter)(pc, gabor_folder_path, img2, gray_image, image_info)
                                           for pc in param_combinations)
-
+    
+    output_file = os.path.join(gabor_folder_path, 'Gabor_kernels.png')
+    
+    save_subplot_png(out, output_file)
+    
     # Create feature stack
     name_RGB_list = ['1_R', '2_G', '3_B']
 
@@ -124,10 +222,13 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores):
 
     # Create a list of feature paths and names
     features_path_list = sorted(glob.glob(os.path.join(gabor_folder_path, '*.tif')))
-    features_name = name_RGB_list + filters_name
+    
+    features_name = [os.path.basename(n).split('_')[-1][:-4] for n in features_path_list]
+    
+    #features_name = name_RGB_list + filters_name
 
     # Create a VRT (Virtual Dataset) from the features
-    create_vrt(features_path_list, features_name)
+    create_vrt(features_path_list, features_name, resolution=resolution)
     print('Texture features are saved in:  ' + gabor_folder_path)
 
     return gabor_folder_path
