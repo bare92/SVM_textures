@@ -202,58 +202,63 @@ def fill_nodata_multichannel(vhr_img_path, no_data_value=-9999):
     import numpy as np
     import scipy.ndimage as ndimage
     from utilities import open_image
+    import os
     
-    image, image_info = open_image(vhr_img_path)
-    # Initialize an output image with the same shape as the input image
-    filled_image = np.copy(image)
-    
-    def_no_data_mask = (image[0] == no_data_value).astype('uint8')
-    
-    # Apply the majority filter with a 5x5 window
-    filtered_nodata_map = majority_filter(def_no_data_mask, size=5).astype('bool')
-    
-    # Loop through each channel
-    for c in range(image.shape[0]):
-        # Create a mask of the no data pixels for the current channel
-        no_data_mask = (image[c] == no_data_value)
-        
-        # Create a structure element that defines connectivity (4-connected neighborhood)
-        structure = np.array([[0, 1, 0],
-                              [1, 1, 1],
-                              [0, 1, 0]], dtype=bool)
-        
-        # Label the connected components in the no data mask
-        labeled_array, num_features = ndimage.label(no_data_mask, structure=structure)
-        
-        for label in range(1, num_features + 1):
-            # Extract the current connected component
-            component_mask = (labeled_array == label)
-            
-            # Find the bounding box of the component
-            slice_y, slice_x = ndimage.find_objects(component_mask)[0]
-            
-            # Extract the neighborhood around the component
-            neighborhood_slice_y = slice(max(slice_y.start - 1, 0), min(slice_y.stop + 1, image.shape[1]))
-            neighborhood_slice_x = slice(max(slice_x.start - 1, 0), min(slice_x.stop + 1, image.shape[2]))
-            
-            neighborhood = filled_image[c, neighborhood_slice_y, neighborhood_slice_x]
-            neighborhood_mask = (neighborhood != no_data_value)
-            
-            if np.any(neighborhood_mask):
-                # Compute the mean of the valid neighborhood pixels
-                mean_value = np.mean(neighborhood[neighborhood_mask])
-                
-                # Fill the component with the mean value
-                filled_image[c, component_mask] = mean_value
-                
     out_path = vhr_img_path[:-4] + '_filled.tif'
     
-    filled_image[:, filtered_nodata_map] = no_data_value
+    if not os.path.exists(out_path):
+        
+        image, image_info = open_image(vhr_img_path)
+        # Initialize an output image with the same shape as the input image
+        filled_image = np.copy(image)
+        
+        def_no_data_mask = (image[0] == no_data_value).astype('uint8')
+        
+        # Apply the majority filter with a 5x5 window
+        filtered_nodata_map = majority_filter(def_no_data_mask, size=5).astype('bool')
+        
+        # Loop through each channel
+        for c in range(image.shape[0]):
+            # Create a mask of the no data pixels for the current channel
+            no_data_mask = (image[c] == no_data_value)
+            
+            # Create a structure element that defines connectivity (4-connected neighborhood)
+            structure = np.array([[0, 1, 0],
+                                  [1, 1, 1],
+                                  [0, 1, 0]], dtype=bool)
+            
+            # Label the connected components in the no data mask
+            labeled_array, num_features = ndimage.label(no_data_mask, structure=structure)
+            
+            for label in range(1, num_features + 1):
+                # Extract the current connected component
+                component_mask = (labeled_array == label)
+                
+                # Find the bounding box of the component
+                slice_y, slice_x = ndimage.find_objects(component_mask)[0]
+                
+                # Extract the neighborhood around the component
+                neighborhood_slice_y = slice(max(slice_y.start - 1, 0), min(slice_y.stop + 1, image.shape[1]))
+                neighborhood_slice_x = slice(max(slice_x.start - 1, 0), min(slice_x.stop + 1, image.shape[2]))
+                
+                neighborhood = filled_image[c, neighborhood_slice_y, neighborhood_slice_x]
+                neighborhood_mask = (neighborhood != no_data_value)
+                
+                if np.any(neighborhood_mask):
+                    # Compute the mean of the valid neighborhood pixels
+                    mean_value = np.mean(neighborhood[neighborhood_mask])
+                    
+                    # Fill the component with the mean value
+                    filled_image[c, component_mask] = mean_value
+                    
+        out_path = vhr_img_path[:-4] + '_filled.tif'
+        
+        filled_image[:, filtered_nodata_map] = no_data_value
+        
+        save_image(filled_image, out_path, 'GTiff', 6, image_info['geotransform'], image_info['projection'], NoDataValue=no_data_value)
+        
     
-    save_image(filled_image, out_path, 'GTiff', 6, image_info['geotransform'], image_info['projection'], NoDataValue=no_data_value)
-    
-    
-    return filled_image    
+    return;    
 
 # Function to generate Gabor features
 
