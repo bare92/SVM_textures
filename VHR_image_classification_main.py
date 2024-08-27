@@ -11,10 +11,16 @@ import numpy as np
 import glob
 
 ##########################################################################
-# Texture features generation
-generate_features = False  # Flag to control whether to generate texture features
-vhr_img_path = '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/hintereisferner1-2018-07-19-1100_map.tif'
+# Fill holes
+fill_holes = False
+vhr_unf_img_path = '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/hintereisferner1-220801-0830-hu_map.tif'
+no_data_val = -9999
 
+##########################################################################
+# Texture features generation
+generate_features = True  # Flag to control whether to generate texture features
+vhr_img_path = '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/hintereisferner1-220801-0830-hu_map_filled.tif'
+#vhr_img_path = '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_06/hintereisferner1-220806-1230-hu_map.tif'
 # Parallel processing
 num_cores = 1  # Number of CPU cores to use for parallel processing
 
@@ -22,15 +28,15 @@ num_cores = 1  # Number of CPU cores to use for parallel processing
 gabor_params = {'theta_list': [theta / 4. * np.pi for theta in range(4)],  # List of theta values for Gabor filters
                 'lambda_list': np.arange(2, 8, 4)}  # List of lambda values for Gabor filters
 
+no_data_val = -9999
 ##########################################################################
 # Parameters for extracting training samples from shapefiles
 performs2d = True  # Flag to control whether to perform the extraction of training samples
 
 # List of raster files
 fileNameList_raster = [
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/Gabor_features/00_features.vrt',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/Gabor_features/00_features.vrt',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/Gabor_features/00_features.vrt'
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features/hintereisferner1-220801-0830-hu_map_filled_features.vrt',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features/hintereisferner1-220801-0830-hu_map_filled_features.vrt'
 ]
 
 # fileNameList_raster = [
@@ -41,9 +47,8 @@ fileNameList_raster = [
 
 # List of shapefiles
 fileNameList_shape = [
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/SVM_classifier/round_01/round_01.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/SVM_classifier/round_02/round_02.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/SVM_classifier/round_03/round_03.shp'
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_01/round_01.shp',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_02/round_02.shp'
 ]
 
 fieldName = 'class'  # Field name in shapefiles representing the class labels
@@ -57,8 +62,8 @@ performSVMtrain = True  # Flag to control whether to perform SVM training
 
 # Parameters for SVM training
 training_set_filename = output_training_filename
-gamma_range = np.logspace(-4, 0, 100)  # Range of gamma values for SVM
-C_range = np.logspace(-4, -1, 100)  # Range of C values for SVM
+gamma_range = np.logspace(-3, 1, 50)  # Range of gamma values for SVM
+C_range = np.logspace(-1, 3, 50)  # Range of C values for SVM
 cv = 5  # Number of cross-validation folds
 probFlag = False  # Flag to indicate whether to enable probability estimates
 n_jobs = -1  # Number of jobs to run in parallel (-1 means using all processors)
@@ -83,7 +88,8 @@ classColors = {'other': (152,118,84),
 
 # Preparing input and output file names for prediction
 
-input_fileName = [fileNameList_raster[0]]
+#input_fileName = [fileNameList_raster[0]]
+input_fileName= ['/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features/hintereisferner1-220801-0830-hu_map_filled_features.vrt']
 
 output_folder = os.path.join(os.path.dirname(os.path.dirname(fileNameList_shape[-1])), 'Classified_image')
 os.makedirs(output_folder, exist_ok=True)  # Create output folder if it doesn't exist
@@ -95,10 +101,15 @@ for curr_filename in input_fileName:
 
 ##########################################################################
 # Main execution logic
+if fill_holes:
+    print('NO DATA FILLING...')
+    from texture_features_generation import fill_nodata_multichannel
+    filled_img = fill_nodata_multichannel(vhr_unf_img_path, no_data_value=no_data_val)
+
 if generate_features:    
     print('GENERATING CLASSIFICATION FEATURES...')
     from texture_features_generation import gabor_features_generator
-    gabor_folder_path = gabor_features_generator(vhr_img_path, gabor_params, num_cores)
+    gabor_folder_path = gabor_features_generator(vhr_img_path, gabor_params, no_data_val, num_cores)
 
 if performs2d:
     print('EXTRACTING TRAINING SAMPLES...')
