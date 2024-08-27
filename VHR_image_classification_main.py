@@ -12,11 +12,11 @@ import glob
 
 ##########################################################################
 # Texture features generation
-generate_features = True  # Flag to control whether to generate texture features
-vhr_img_path = '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/hintereisferner1-2018-07-19-1100_map.tif'
+generate_features = False  # Flag to control whether to generate texture features
+vhr_img_path = '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/hintereisferner1-2018-07-19-1100_map.tif'
 
 # Parallel processing
-num_cores = 8  # Number of CPU cores to use for parallel processing
+num_cores = 1  # Number of CPU cores to use for parallel processing
 
 # Parameters for Gabor filter
 gabor_params = {'theta_list': [theta / 4. * np.pi for theta in range(4)],  # List of theta values for Gabor filters
@@ -24,13 +24,13 @@ gabor_params = {'theta_list': [theta / 4. * np.pi for theta in range(4)],  # Lis
 
 ##########################################################################
 # Parameters for extracting training samples from shapefiles
-performs2d = False  # Flag to control whether to perform the extraction of training samples
+performs2d = True  # Flag to control whether to perform the extraction of training samples
 
 # List of raster files
 fileNameList_raster = [
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/Gabor_features/00_features.vrt',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/Gabor_features/00_features.vrt',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/Gabor_features/00_features.vrt'
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/Gabor_features/00_features.vrt',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/Gabor_features/00_features.vrt',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/Gabor_features/00_features.vrt'
 ]
 
 # fileNameList_raster = [
@@ -41,9 +41,9 @@ fileNameList_raster = [
 
 # List of shapefiles
 fileNameList_shape = [
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/SVM_class/round_01/round_01.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/SVM_class/round_02/round_02.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/SVM_class/round_03/round_03.shp'
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/SVM_classifier/round_01/round_01.shp',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/SVM_classifier/round_02/round_02.shp',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_6/SVM_classifier/round_03/round_03.shp'
 ]
 
 fieldName = 'class'  # Field name in shapefiles representing the class labels
@@ -53,12 +53,12 @@ noDataValue = 0  # Value representing no data in raster files
 
 ##########################################################################
 # Parameters for SVM training
-performSVMtrain = False  # Flag to control whether to perform SVM training
+performSVMtrain = True  # Flag to control whether to perform SVM training
 
 # Parameters for SVM training
 training_set_filename = output_training_filename
-gamma_range = np.logspace(-4, -1, 50)  # Range of gamma values for SVM
-C_range = np.logspace(0, 4, 50)  # Range of C values for SVM
+gamma_range = np.logspace(-4, 0, 100)  # Range of gamma values for SVM
+C_range = np.logspace(-4, -1, 100)  # Range of C values for SVM
 cv = 5  # Number of cross-validation folds
 probFlag = False  # Flag to indicate whether to enable probability estimates
 n_jobs = -1  # Number of jobs to run in parallel (-1 means using all processors)
@@ -70,7 +70,7 @@ grid_search_filename = os.path.join(os.path.dirname(fileNameList_shape[-1]), rou
 
 ##########################################################################
 # Parameters for SVM prediction
-performSVMpredict = False  # Flag to control whether to perform SVM prediction
+performSVMpredict = True  # Flag to control whether to perform SVM prediction
 
 # Parameters for SVM prediction
 score = False  # Flag to indicate whether to compute prediction scores

@@ -5,12 +5,43 @@ Created on Wed Jul 31 14:29:41 2024
 
 @author: rbarella
 """
+from utilities import save_image
+
+def rescale_array(array):
+    """
+    Rescale a numpy array to the range [0, 255].
+
+    Parameters:
+    - array: Input numpy array (can be any shape)
+
+    Returns:
+    - rescaled_array: Rescaled numpy array with values in the range [0, 255]
+    """
+    # Get the minimum and maximum values of the array
+    
+    import numpy as np
+    
+    min_val = np.min(array)
+    max_val = np.max(array)
+
+    # Rescale the array to the range [0, 255]
+    rescaled_array = 255 * (array - min_val) / (max_val - min_val)
+
+    # Convert to unsigned 8-bit integer (uint8)
+    rescaled_array = rescaled_array.astype(np.uint8)
+
+    return rescaled_array
+
+
 # Function to process each Gabor filter configuration
 def process_gabor_filter(pc, gabor_folder_path, img2, gray_image, image_info):
     import cv2
     import numpy as np
     import os
-    from utilities import save_image
+    
+    
+    current_directory = os.getcwd()
+    print("Current Working Directory:", current_directory)
 
     num = pc[0]  # Filter number
     lamda = pc[2]  # Wavelength of the sinusoidal factor
@@ -143,7 +174,7 @@ def save_subplot_png(data, output_file):
     plt.close()
     print("Figure closed.")
 # Function to generate Gabor features
-def gabor_features_generator(vhr_img_path, gabor_params, num_cores, resolution=None):
+def gabor_features_generator(vhr_img_path, gabor_params, num_cores, resolution=None, assign_names=False):
     from utilities import open_image, save_image
     import os
     from osgeo import gdal
@@ -152,6 +183,12 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores, resolution=N
     import glob
     from joblib import Parallel, delayed
     import rasterio
+    
+    current_directory = os.getcwd()
+    print("Current Working Directory:", current_directory)
+
+    # Move to the current working directory (useful if you previously changed directories)
+    os.chdir(current_directory)
 
     # Open the VHR (Very High Resolution) image
     image, image_info = open_image(vhr_img_path)
@@ -171,12 +208,17 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores, resolution=N
         
     image[image<0] = 0
     
+    if np.shape(image)[0] == 3:
     
-    gray_image = cv2.cvtColor(np.transpose(image.astype('uint8'), (1, 2, 0)), cv2.COLOR_BGR2GRAY)
-
+        gray_image = cv2.cvtColor(np.transpose(image.astype('uint8'), (1, 2, 0)), cv2.COLOR_BGR2GRAY)
+    
+        
+        
+    elif len(np.shape(image)) == 2:
+        gray_image = rescale_array(image)
+        
     # Reshape the image to 2D
     img2 = gray_image.reshape(-1)
-
     # Specify the directory to save Gabor features
     gabor_folder_path = os.path.join(os.path.dirname(vhr_img_path), 'Gabor_features')
     if not os.path.exists(gabor_folder_path):
@@ -202,13 +244,16 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores, resolution=N
                                         for lamda in lambda_list], start=1)]
 
     # Parallel computation of Gabor features
+    
+   
     out = Parallel(n_jobs=num_cores, verbose=1)(delayed(process_gabor_filter)(pc, gabor_folder_path, img2, gray_image, image_info)
-                                          for pc in param_combinations)
+                                      for pc in param_combinations)
     
     output_file = os.path.join(gabor_folder_path, 'Gabor_kernels.png')
     
     save_subplot_png(out, output_file)
     
+    #if assign_names: 
     # Create feature stack
     name_RGB_list = ['1_R', '2_G', '3_B']
 
@@ -224,7 +269,9 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores, resolution=N
     features_path_list = sorted(glob.glob(os.path.join(gabor_folder_path, '*.tif')))
     
     features_name = [os.path.basename(n).split('_')[-1][:-4] for n in features_path_list]
-    
+        
+  
+        
     #features_name = name_RGB_list + filters_name
 
     # Create a VRT (Virtual Dataset) from the features
