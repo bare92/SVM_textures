@@ -34,7 +34,7 @@ def rescale_array(array):
 
 
 # Function to process each Gabor filter configuration
-def process_gabor_filter(pc, gabor_folder_path, img2, gray_image, image_info, no_data_val):
+def process_gabor_filter(pc, gabor_folder_path, img2, gray_image, image_info, no_data_val, ksize):
     import cv2
     import numpy as np
     import os
@@ -52,10 +52,17 @@ def process_gabor_filter(pc, gabor_folder_path, img2, gray_image, image_info, no
     kernels = []
     
     curr_gabor_path = os.path.join(gabor_folder_path, gabor_label + '.tif')
-    sigma = 0.56 * lamda  # Standard deviation of the Gaussian function used in the Gabor filter
+    if len(pc) == 3:
+        sigma = 0.56 * lamda  # Standard deviation of the Gaussian function used in the Gabor filter
+        
+    else:
+        sigma = pc[3]
     
     # Create the Gabor kernel
-    ksize = int(8 * sigma + 1)  # Size of the filter
+    if ksize == None:
+        ksize = int(8 * sigma + 1)  # Size of the filter
+        
+    print(ksize)   
     kernel = cv2.getGaborKernel((ksize, ksize), sigma, theta, lamda, gamma, 0, ktype=cv2.CV_32F)
 
     # Check if the Gabor filter image already exists
@@ -63,7 +70,6 @@ def process_gabor_filter(pc, gabor_folder_path, img2, gray_image, image_info, no
         print(gabor_label)
 
         
-
         # Apply the Gabor filter to the image
         fimg = cv2.filter2D(gray_image, cv2.CV_32F, kernel)
         filtered_img = np.reshape(fimg, np.shape(gray_image))
@@ -197,72 +203,104 @@ def majority_filter(binary_map, size=5):
     return filtered_map
 
 
-def fill_nodata_multichannel(vhr_img_path, no_data_value=-9999):
+def fill_nodata_multichannel_optimized(vhr_img_path, no_data_value=-9999):
     
     import numpy as np
     import scipy.ndimage as ndimage
-    from utilities import open_image
+    from utilities import open_image, save_image
     import os
     
+    """
+    Optimized function to fill no-data values using morphological dilation and vectorized operations.
+    """
+
     out_path = vhr_img_path[:-4] + '_filled.tif'
     
     if not os.path.exists(out_path):
-        
         image, image_info = open_image(vhr_img_path)
-        # Initialize an output image with the same shape as the input image
         filled_image = np.copy(image)
         
-        def_no_data_mask = (image[0] == no_data_value).astype('uint8')
-        
-        # Apply the majority filter with a 5x5 window
-        filtered_nodata_map = majority_filter(def_no_data_mask, size=5).astype('bool')
+        # Define a 5x5 structuring element for dilation
+        structure = np.ones((5, 5), dtype=bool)
         
         # Loop through each channel
         for c in range(image.shape[0]):
-            # Create a mask of the no data pixels for the current channel
             no_data_mask = (image[c] == no_data_value)
             
-            # Create a structure element that defines connectivity (4-connected neighborhood)
-            structure = np.array([[0, 1, 0],
-                                  [1, 1, 1],
-                                  [0, 1, 0]], dtype=bool)
+            # Dilate the no-data mask to expand the regions
+            dilated_mask = ndimage.binary_dilation(no_data_mask, structure=structure)
             
-            # Label the connected components in the no data mask
-            labeled_array, num_features = ndimage.label(no_data_mask, structure=structure)
+            # Get valid data in the neighborhood
+            valid_data_mask = ~dilated_mask
             
-            for label in range(1, num_features + 1):
-                # Extract the current connected component
-                component_mask = (labeled_array == label)
-                
-                # Find the bounding box of the component
-                slice_y, slice_x = ndimage.find_objects(component_mask)[0]
-                
-                # Extract the neighborhood around the component
-                neighborhood_slice_y = slice(max(slice_y.start - 1, 0), min(slice_y.stop + 1, image.shape[1]))
-                neighborhood_slice_x = slice(max(slice_x.start - 1, 0), min(slice_x.stop + 1, image.shape[2]))
-                
-                neighborhood = filled_image[c, neighborhood_slice_y, neighborhood_slice_x]
-                neighborhood_mask = (neighborhood != no_data_value)
-                
-                if np.any(neighborhood_mask):
-                    # Compute the mean of the valid neighborhood pixels
-                    mean_value = np.mean(neighborhood[neighborhood_mask])
-                    
-                    # Fill the component with the mean value
-                    filled_image[c, component_mask] = mean_value
-                    
-        out_path = vhr_img_path[:-4] + '_filled.tif'
-        
-        filled_image[:, filtered_nodata_map] = no_data_value
-        
+            # Calculate the mean value for each region based on the dilation
+            mean_filled_image = ndimage.generic_filter(
+                image[c], 
+                lambda x: np.mean(x[x != no_data_value]) if np.any(x != no_data_value) else no_data_value, 
+                footprint=structure, 
+                mode='constant', 
+                cval=no_data_value
+            )
+            
+            # Fill no-data regions in the image with the mean of the valid neighborhood
+            filled_image[c, no_data_mask] = mean_filled_image[no_data_mask]
+
+        # Save the result
         save_image(filled_image, out_path, 'GTiff', 6, image_info['geotransform'], image_info['projection'], NoDataValue=no_data_value)
-        
+
+    return
+
+
+
+def pca_transform(data, n_components=None, variance_threshold=0.95):
+    """
+    Perform PCA on a 3D numpy array along the bands dimension.
     
-    return;    
+    Parameters:
+        data (numpy.ndarray): Input array with shape (bands, rows, cols).
+        n_components (int): The number of principal components to retain.
+    
+    Returns:
+        numpy.ndarray: Transformed array with shape (n_components, rows, cols).
+    """
+    
+    import numpy as np
+    from sklearn.decomposition import PCA
+    from sklearn.preprocessing import StandardScaler
+    
+    bands, rows, cols = data.shape
+    
+    # Reshape the data to (rows*cols, bands) for PCA
+    data_reshaped = data.reshape(bands, rows * cols).T
+    
+    # Normalize the data
+    scaler = StandardScaler()
+    data_normalized = scaler.fit_transform(data_reshaped)
+    
+    if n_components == None:
+        # Perform PCA to determine the explained variance ratio
+        pca = PCA().fit(data_normalized)
+        cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
+        
+        # Determine the number of components based on the variance threshold
+        n_components = np.argmax(cumulative_variance >= variance_threshold) + 1
+    
+    # Perform PCA again with the selected number of components
+    pca = PCA(n_components=n_components)
+    data_pca = pca.fit_transform(data_normalized)
+    
+    # Reshape the PCA result back to (n_components, rows, cols)
+    data_pca_reshaped = data_pca.T.reshape(n_components, rows, cols)
+    
+    print(data_pca_reshaped.shape)
+    
+    
+    return data_pca_reshaped
+
 
 # Function to generate Gabor features
 
-def gabor_features_generator(vhr_img_path, gabor_params, num_cores, no_data_val, resolution=None, assign_names=False):
+def gabor_features_generator(vhr_img_path, gabor_params, num_cores, no_data_val, ksize=None, resolution=None, assign_names=False, PCA=False, n_components=None):
     from utilities import open_image, save_image
     import os
     from osgeo import gdal
@@ -313,34 +351,49 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores, no_data_val,
         
     # Reshape the image to 2D
     img2 = gray_image.reshape(-1)
-    # Specify the directory to save Gabor features
-    gabor_folder_path = os.path.join(os.path.dirname(vhr_img_path), 'Gabor_features')
-    if not os.path.exists(gabor_folder_path):
-        os.makedirs(gabor_folder_path)
-        print('Gabor_features folder created')
+    
 
     # Initialize lists to hold Gabor filter parameters
-    kernels = []
-    names_list = []
+
 
     # Extract Gabor filter parameters
     theta_list = gabor_params['theta_list']  # List of theta values
     lambda_list = gabor_params['lambda_list']  # List of lambda values
-    gamma_list = [0.5]
-    number_of_filters = len(theta_list) * len(lambda_list) * len(gamma_list)
+    gamma_list = gabor_params['gamma_list']
+    sigma_list = gabor_params['sigma_list']
+    number_of_filters = len(theta_list) * len(lambda_list) * len(gamma_list) * len(sigma_list)
+    
+    # Specify the directory to save Gabor features
+    gabor_folder_path = os.path.join(os.path.dirname(vhr_img_path), '0_pca_Gabor_features_' + str(number_of_filters) + '_filters')
+    if not os.path.exists(gabor_folder_path):
+        os.makedirs(gabor_folder_path)
+        print('Gabor_features folder created')
     filters_name = ['Gabor' + str(i).zfill(2) for i in np.arange(0, number_of_filters, 1) + 1]
-
-    # Generate a list of all parameter combinations
-    param_combinations = [(num, theta, lamda)
-                          for num, (theta, lamda)
-                          in enumerate([(theta, lamda)
-                                        for theta in theta_list
-                                        for lamda in lambda_list], start=1)]
+    
+    if sigma_list == []:
+        # Generate a list of all parameter combinations
+        param_combinations = [(num, theta, lamda)
+                              for num, (theta, lamda)
+                              in enumerate([(theta, lamda)
+                                            for theta in theta_list
+                                            for lamda in lambda_list
+                                           ], start=1)]
+        
+    else:
+        # Generate a list of all parameter combinations
+        param_combinations = [(num, theta, lamda, sigma)
+                              for num, (theta, lamda, sigma)
+                              in enumerate([(theta, lamda, sigma)
+                                            for theta in theta_list
+                                            for lamda in lambda_list
+                                            for sigma in sigma_list], start=1)]
+        
+    
 
     # Parallel computation of Gabor features
     
    
-    out = Parallel(n_jobs=num_cores, verbose=1)(delayed(process_gabor_filter)(pc, gabor_folder_path, img2, gray_image, image_info, no_data_val)
+    out = Parallel(n_jobs=num_cores, verbose=1)(delayed(process_gabor_filter)(pc, gabor_folder_path, img2, gray_image, image_info, no_data_val, ksize)
                                       for pc in param_combinations)
     
     output_file = os.path.join(gabor_folder_path, 'Gabor_kernels.png')
@@ -371,5 +424,18 @@ def gabor_features_generator(vhr_img_path, gabor_params, num_cores, no_data_val,
     filename_features = os.path.basename(vhr_img_path)[:-4] + '_features.vrt'
     create_vrt(features_path_list, features_name, filename_features,no_data_val, resolution=resolution)
     print('Texture features are saved in:  ' + gabor_folder_path)
+    
+    if PCA:
+        #PCA features
+        
+        features_stack = open_image(os.path.join(gabor_folder_path, filename_features))[0][:-3]
+        
+        PCA_features = pca_transform(features_stack, n_components=10, variance_threshold=0.95)
+        
+        features = np.vstack((image, PCA_features))
+        
+        pca_features_path = os.path.join(gabor_folder_path, os.path.basename(vhr_img_path)[:-4] + '_PCA_features.tif')
+        
+        save_image(features, pca_features_path, 'GTiff', 6, image_info['geotransform'], image_info['projection'], NoDataValue=no_data_val)
 
     return gabor_folder_path
