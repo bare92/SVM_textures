@@ -13,7 +13,7 @@ import glob
 
 ##########################################################################
 # Fill holes
-fill_holes = True
+fill_holes = False
 #vhr_unf_img_path_list = ['/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_June/georef_result/June_11/hintereisferner1-220611-1230-hu_map.tif']
 
 vhr_unf_img_path_list =  glob.glob(os.path.join('/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/webcam_orthorect', 'georef*', 'georef_result', '*', '*-hu_map.tif'))
@@ -23,7 +23,7 @@ no_data_val = -9999
 
 ###########################################################################
 
-crop_maps = True
+crop_maps = False
 # Definisci il percorso della directory contenente le immagini
 
 mask_shapefile = "/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect_1/hintereisferner_extent_s2.shp"
@@ -36,9 +36,11 @@ input_files = glob.glob(os.path.join('/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/webcam
 
 ##########################################################################
 # Texture features generation
-generate_features = True # Flag to control whether to generate texture features
+generate_features = False # Flag to control whether to generate texture features
 #vhr_img_path = '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/hintereisferner1-220801-0830-hu_map_filled.tif'
 vhr_img_path_list = glob.glob(os.path.join('/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/webcam_orthorect', 'georef*', 'georef_result', '*', 'cropped*hu_map_filled.tif'))
+
+vhr_img_path_list = ['/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/Downsampled_UAV/20240704_Cervinia_snow_patches_ortho_25cm_orto_32632.tif']
 # Parallel processing
 num_cores = 8  # Number of CPU cores to use for parallel processing
 
@@ -47,7 +49,7 @@ gabor_params = {'theta_list': [theta / 4. * np.pi for theta in range(4)],  # Lis
                 'lambda_list': np.arange(2, 16, 2),
                 'gamma_list': [0.5],
                 'sigma_list': [1, 3],
-                'ksize': 7}  # List of lambda values for Gabor filters
+                'ksize': 15}  # List of lambda values for Gabor filters
 
 # gabor_params = {'theta_list': [theta / 4. * np.pi for theta in range(4)],  # List of theta values for Gabor filters
 #                 'lambda_list': np.arange(2, 8, 4),
@@ -58,36 +60,21 @@ gabor_params = {'theta_list': [theta / 4. * np.pi for theta in range(4)],  # Lis
 # PCA
 #
 
-PCA = True
+PCA = False
 n_components = 10
 no_data_val = -9999
 ##########################################################################
 # Parameters for extracting training samples from shapefiles
-performs2d = False  # Flag to control whether to perform the extraction of training samples
+performs2d = True  # Flag to control whether to perform the extraction of training samples
 
-# # List of raster files
-# fileNameList_raster = [
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features/hintereisferner1-220801-0830-hu_map_filled_features.vrt',
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features/hintereisferner1-220801-0830-hu_map_filled_features.vrt',
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features/hintereisferner1-220801-0830-hu_map_filled_features.vrt',
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_June/georef_result/June_11/Gabor_features/hintereisferner1-220611-1230-hu_map_filled_features.vrt',
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_June/georef_result/June_11/Gabor_features/hintereisferner1-220611-1230-hu_map_filled_features.vrt',
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_June/georef_result/June_14/Gabor_features/hintereisferner1-220614-1130-hu_map_filled_features.vrt',
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_05/Gabor_features/hintereisferner1-220805-1230-hu_map_filled_features.vrt',
-#     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features/hintereisferner1-220801-0830-hu_map_filled_features.vrt'
-# ]
 
 # List of raster files
 fileNameList_raster = [
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features_56_filters/hintereisferner1-220801-0830-hu_map_filled_PCA_features.tif',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features_56_filters/hintereisferner1-220801-0830-hu_map_filled_PCA_features.tif',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features_56_filters/hintereisferner1-220801-0830-hu_map_filled_PCA_features.tif',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_June/georef_result/June_11/Gabor_features_56_filters/hintereisferner1-220611-1230-hu_map_filled_PCA_features.tif',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_June/georef_result/June_11/Gabor_features_56_filters/hintereisferner1-220611-1230-hu_map_filled_PCA_features.tif',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_June/georef_result/June_14/Gabor_features_56_filters/hintereisferner1-220614-1130-hu_map_filled_PCA_features.tif',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_05/Gabor_features_56_filters/hintereisferner1-220805-1230-hu_map_filled_PCA_features.tif',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/August_01/Gabor_features_56_filters/hintereisferner1-220801-0830-hu_map_filled_PCA_features.tif'
-]
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/Downsampled_UAV/0_pca_Gabor_features_56_filters/20240704_Cervinia_snow_patches_ortho_25cm_orto_32632_features.vrt',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/Downsampled_UAV/0_pca_Gabor_features_56_filters/20240704_Cervinia_snow_patches_ortho_25cm_orto_32632_features.vrt',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/Downsampled_UAV/0_pca_Gabor_features_56_filters/20240704_Cervinia_snow_patches_ortho_25cm_orto_32632_features.vrt',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/Downsampled_UAV/0_pca_Gabor_features_56_filters/20240704_Cervinia_snow_patches_ortho_25cm_orto_32632_features.vrt'
+    ]
 
 # fileNameList_raster = [
 #     '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/OUT_Flavia/georef_result/test_run_Flavia_4/hintereisferner1-2018-07-19-1100_map.tif',
@@ -96,16 +83,13 @@ fileNameList_raster = [
 # ]
 
 # List of shapefiles
+# List of shapefiles
 fileNameList_shape = [
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_01/round_01.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_02/round_02.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_03/round_03.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_04/round_04.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_05/round_05.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_06/round_06.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_07/round_07.shp',
-    '/mnt/CEPH_PROJECTS/ALPSNOW/Flavia/webcam_orthorect/georef_August/georef_result/Image_classification/round_08/round_08.shp'
-]
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/UAV_SVM_texture/Round_01/round_01.shp',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/UAV_SVM_texture/Round_02/round_02_tex.shp',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/UAV_SVM_texture/Round_03/round_03_tex.shp',
+    '/mnt/CEPH_PROJECTS/ALPSNOW/Riccardo/HYPERSPECTRAL/UAV_SVM_texture/Round_04/round_04_tex.shp'
+    ]
 
 fieldName = 'class'  # Field name in shapefiles representing the class labels
 round_ = os.path.basename(os.path.dirname(fileNameList_shape[-1]))  # Extracting the round name from the directory path
@@ -114,17 +98,17 @@ noDataValue = -9999  # Value representing no data in raster files
 
 ##########################################################################
 # Parameters for SVM training
-performSVMtrain = False  # Flag to control whether to perform SVM training
+performSVMtrain = True  # Flag to control whether to perform SVM training
 
 # Parameters for SVM training
 training_set_filename = output_training_filename
-gamma_range = np.logspace(-2, 1, 50)  # Range of gamma values for SVM
-C_range = np.logspace(-1, 2, 50)  # Range of C values for SVM
-cv = 8  # Number of cross-validation folds
+gamma_range = np.logspace(-2, 2, 100)  # Range of gamma values for SVM
+C_range = np.logspace(-2, 2, 100)  # Range of C values for SVM
+cv = 3  # Number of cross-validation folds
 probFlag = False  # Flag to indicate whether to enable probability estimates
 n_jobs = -1  # Number of jobs to run in parallel (-1 means using all processors)
 cs = 4028  # Random seed or custom setting
-target_names=['snow', 'ice', 'other']
+target_names=['snow', 'no_snow']
 
 svm_model_filename_out = os.path.join(os.path.dirname(fileNameList_shape[-1]), round_ + '_Snow_model2.p')  # Output path for the trained SVM model
 grid_search_filename = os.path.join(os.path.dirname(fileNameList_shape[-1]), round_ + '_Snow_grid2.png')  # Output path for the grid search plot
