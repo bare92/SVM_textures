@@ -1,21 +1,40 @@
-def svmPredict(svmModel, svmMatrix, score):
-    """
-    Function to make predictions using a trained SVM model.
+def xgboostPredict(best_model, features):
+    
+    return best_model.predict(features)
 
-    Parameters:
-    svmModel (SVC): Trained SVM model.
-    svmMatrix (array): Input data for prediction.
-    score (bool): Flag to decide whether to return decision function scores.
+    
+def apply_color_table(output_fileName, classColors, target_names):
+    
+    from osgeo import gdal
+    """
+    Apply a color table to an existing classified raster image.
+
+    Args:
+        image_path (str): Path to the existing classified raster.
+        class_colors (dict): Dictionary mapping class labels to RGB tuples.
 
     Returns:
-    array: Predictions or probabilities/decision function scores based on the input parameters.
+        None
     """
-    if svmModel.probability:
-        return svmModel.predict_proba(svmMatrix)  # Return probabilities if probability flag is set
-    elif score:
-        return svmModel.decision_function(svmMatrix)  # Return decision function scores if score flag is set
-    else:
-        return svmModel.predict(svmMatrix)  # Return class predictions otherwise
+    # Open the raster in update mode
+    dataset = gdal.Open(output_fileName, gdal.GA_Update)
+    if dataset is None:
+        raise FileNotFoundError(f"Unable to open {output_fileName}")
+    
+    # Get the first band (assuming classification raster is single-band)
+    band = dataset.GetRasterBand(1)
+    
+    # Create a color table
+    color_table = gdal.ColorTable()
+    for i, values in enumerate(target_names):
+      color_table.SetColorEntry(i + 1, classColors[values])
+    # Assign the color table to the band
+    band.SetColorTable(color_table)
+    band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
+    
+    # Close the dataset to save changes
+    dataset = None
+    print(f"Color table applied to {output_fileName}")
 
 def svmPredict_image(svm_fileName, input_fileName_List, Nprocesses, svmCacheSize, inputNoDataValue, score,
                      classColors, output_fileName_List):
@@ -43,141 +62,83 @@ def svmPredict_image(svm_fileName, input_fileName_List, Nprocesses, svmCacheSize
     from sklearn import preprocessing
     import sys
     import os
+    from xgboost import XGBClassifier
+    import rasterio
+    from rasterio.enums import ColorInterp
+    from rasterio.io import MemoryFile
 
     for input_fileName, output_fileName in zip(input_fileName_List, output_fileName_List):
-        # Read the input image
-        img = gdal.Open(input_fileName)
-        if img is None:
-            print('Unable to open ' + input_fileName)
-            sys.exit(1)
-        Ncol = img.GetRasterBand(1).XSize
-        Nrow = img.GetRasterBand(1).YSize
-        geoTransform = img.GetGeoTransform()
-        projection = img.GetProjection()
-
+        # Check if the output file already exists
+        if os.path.exists(output_fileName):
+            print(f"IMAGE ALREADY CLASSIFIED: {output_fileName}")
+            continue
+    
         # Load the SVM model
-        svm_dict = pickle.load(open(svm_fileName, 'rb'), encoding='latin1')
-
-        # Set the cache size for the SVM model
-        svm_dict['svmModel'].cache_size = svmCacheSize
-
-        # Create the mask of the input to handle no-data values
-        noNanPixels = np.ones((Nrow, Ncol), dtype=bool)
-        if img.RasterCount >= 1:
-            print('Creating the NOVALUE mask of the input image ' + input_fileName)
-            for b in range(img.RasterCount):
-                if np.isnan(inputNoDataValue):
-                    noNanPixels = np.logical_and(noNanPixels, ~np.isnan(img.GetRasterBand(b + 1).ReadAsArray()))
-                else:
-                    noNanPixels = np.logical_and(noNanPixels, img.GetRasterBand(b + 1).ReadAsArray() != inputNoDataValue)
-
-            # Check if at least one valid pixel exists
-            if np.sum(noNanPixels) == 0:
-                print(input_fileName + ' contains only no data values!')
-                continue
-
-        print('NOVALUE mask created. Creating the input samples list of the SVM from the input image...')
-
-        # Create the list of band names and ordered band indexes for the SVM
-        bandName_list = [img.GetRasterBand(b + 1).GetDescription() for b in range(img.RasterCount)]
-        bandOrder = [bandName_list.index(b) + 1 for b in svm_dict['feature_names']]
-
-        # Create the input samples for the SVM
-        samples = np.zeros((np.sum(noNanPixels), len(bandOrder)))
-        for i, b in enumerate(bandOrder):
-            img_band = img.GetRasterBand(b).ReadAsArray()
-            samples[:, i] = img_band[noNanPixels]
-        img = None
-
-        print('Input samples for the SVM ready. Starting the SVM classification...')
-
-        # Normalize the samples
-        samples = np.nan_to_num(samples)
-        samples = svm_dict['normalizer'].transform(samples)
-
-        # Divide samples into blocks for parallel processing
-        samplesBlocks = np.array_split(samples, Nprocesses, axis=0)
-
-        # Run the SVM prediction for each block in parallel
-        classImage_arrayBlocks = Parallel(n_jobs=Nprocesses, verbose=10)(
-            delayed(svmPredict)(svm_dict['svmModel'], samplesBlocks[i], score) for i in range(len(samplesBlocks)))
-
-        # Concatenate the results
-        if svm_dict['svmModel'].probability:
-            probImage_array = np.concatenate(classImage_arrayBlocks, axis=0)
-            classImage_array = np.argmax(probImage_array, axis=1) + 1
-        elif score:
-            classImage_array = np.concatenate(classImage_arrayBlocks)
-            if len(classImage_array.shape) == 1:
-                classImage_array = classImage_array.reshape(-1, 1)
-        else:
-            classImage_array = np.concatenate(classImage_arrayBlocks)
-
-        print("Classification done. Writing the result to disk...")
-
-        # Write the probability image if present
-        if svm_dict['svmModel'].probability:
-            driver = gdal.GetDriverByName('ENVI')
-            prob_img = driver.Create(output_fileName + '_prob', Ncol, Nrow, len(svm_dict['target_names']), gdal.GDT_Float32)
-
-            # Set the geographic information
-            prob_img.SetGeoTransform(geoTransform)
-            prob_img.SetProjection(projection)
-
-            # Save the probability in each band
-            for b in range(prob_img.RasterCount):
-                layerBand = np.zeros((Nrow, Ncol), dtype='float32') * np.nan
-                layerBand[noNanPixels] = probImage_array[:, b]
-                prob_img_band = prob_img.GetRasterBand(b + 1)
-                prob_img_band.WriteArray(layerBand)
-                prob_img_band.SetDescription(svm_dict['target_names'][b])
-
-            prob_img = None
-            print('Probability image written in ' + output_fileName + '_prob')
-
-        if score:
-            driver = gdal.GetDriverByName('ENVI')
-            score_img = driver.Create(output_fileName, Ncol, Nrow, len(svm_dict['target_names']) * (len(svm_dict['target_names']) - 1) // 2, gdal.GDT_Float32)
-
-            # Set the geographic information
-            score_img.SetGeoTransform(geoTransform)
-            score_img.SetProjection(projection)
-
-            # Save the decision function scores in each band
-            for b in range(score_img.RasterCount):
-                layerBand = np.zeros((Nrow, Ncol), dtype='float32') * np.nan
-                layerBand[noNanPixels] = classImage_array[:, b]
-                prob_img_band = score_img.GetRasterBand(b + 1)
-                prob_img_band.WriteArray(layerBand)
-
-            score_img = None
-            print('Score image written in ' + output_fileName)
-
-        else:
-            # Initialize the classification map
-            driver = gdal.GetDriverByName('ENVI')
-            class_img = driver.Create(output_fileName, Ncol, Nrow, 1, gdal.GDT_Byte)
-
-            # Set the geographic information
-            class_img.SetGeoTransform(geoTransform)
-            class_img.SetProjection(projection)
-
-            # Create the raster of the classification map and write it
-            layerBand = np.zeros((Nrow, Ncol), dtype='uint8')
-            layerBand[noNanPixels] = classImage_array
-            class_img_band = class_img.GetRasterBand(1)
-            class_img_band.WriteArray(layerBand)
-
-            # Set the class labels and the no-data value
-            class_img_band.SetRasterCategoryNames(['Unclassified'] + svm_dict['target_names'])
-
-            # Initialize the color table
-            colorTable = gdal.ColorTable(gdal.GPI_RGB)
-            colorTable.SetColorEntry(0, (0, 0, 0))  # Black for 'Unclassified'
-
-            # Set the colors for all the classes
-            for i, values in enumerate(svm_dict['target_names']):
-                colorTable.SetColorEntry(i + 1, classColors[values])
-                class_img_band.SetColorTable(colorTable)
-
-            class_img = None
+        with open(svm_fileName, 'rb') as model_file:
+            svm_dict = pickle.load(model_file)
+        xgboost_model = svm_dict['xgboostModel']
+        normalizer = svm_dict['normalizer']
+        feature_names = svm_dict['feature_names']
+    
+        # Open the input raster
+        with rasterio.open(input_fileName) as src:
+            profile = src.profile
+            profile.update(dtype='uint8', count=1, nodata=0)  # Update profile for the output
+            print("Descriptions of bands:", src.descriptions)
+            # Read all bands and ensure they have the same dtype
+            print("Reading all raster bands and normalizing dtypes...")
+            bands = np.array([src.read(i + 1).astype(np.float32) for i in range(src.count)])
+   
+            # Create no-data mask
+            print("Creating no-data mask...")
+            if np.isnan(inputNoDataValue):
+                noNanPixels = ~np.isnan(bands).any(axis=0)
+            else:
+                noNanPixels = ~(bands == inputNoDataValue).any(axis=0)
+    
+            if not np.any(noNanPixels):
+                print(f"{input_fileName} contains only no-data values!")
+                
+    
+            print("No-data mask created. Extracting features...")
+    
+            # Extract feature indices and values
+            band_indices = [src.indexes[src.descriptions.index(name)] for name in feature_names]
+            features = np.column_stack([bands[i - 1][noNanPixels] for i in band_indices])
+    
+        # Normalize features
+        features = np.nan_to_num(features)
+        features = normalizer.transform(features)
+    
+        # Split features for parallel processing
+        feature_blocks = np.array_split(features, Nprocesses)
+    
+        # Classify in parallel using XGBoost
+        print("Starting XGBoost classification...")
+        def classify_block(block):
+            return xgboost_model.predict(block)
+    
+        predictions_blocks = Parallel(n_jobs=Nprocesses, verbose=10)(
+            delayed(classify_block)(block) for block in feature_blocks
+        )
+        predictions = np.concatenate(predictions_blocks) + 1  # Adjust class indices
+    
+        # Create the output raster
+        print(f"Writing classified raster to {output_fileName}...")
+        class_map = np.zeros((profile['height'], profile['width']), dtype='uint8')
+        class_map[noNanPixels] = predictions
+        # Update profile for the output file
+        profile.update(
+            dtype='uint8',
+            count=1,  # Single band for classification output
+            driver='GTiff',  # Ensure output is a GeoTIFF
+            )
+        print(f"Writing classified raster to {output_fileName}...")
+        with rasterio.open(output_fileName, 'w', **profile) as dst:
+            # Write the classified map
+            dst.write(class_map.astype('uint8'), 1)
+        target_names = svm_dict['target_names']
+         
+        apply_color_table(output_fileName, classColors, target_names)
+    
+        print(f"Classification completed and saved: {output_fileName}")
